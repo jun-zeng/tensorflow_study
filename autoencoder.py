@@ -2,6 +2,9 @@ import tensorflow.compat.v1 as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow_core.examples.tutorials.mnist import input_data
+import os
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 tf.disable_control_flow_v2()
 tf.disable_eager_execution()
 
@@ -13,12 +16,10 @@ def plot_images(original_images, noisy_images, reconstructed_images):
 
     img_h = img_w = np.sqrt(original_images.shape[-1]).astype(int)
     for i, ax in enumerate(axes):
-        # Plot image.
         ax[0].imshow(original_images[i].reshape((img_h, img_w)), cmap='gray')
         ax[1].imshow(noisy_images[i].reshape((img_h, img_w)), cmap='gray')
         ax[2].imshow(reconstructed_images[i].reshape((img_h, img_w)), cmap='gray')
 
-        # Remove ticks from the plot.
         for sub_ax in ax:
             sub_ax.set_xticks([])
             sub_ax.set_yticks([])
@@ -73,64 +74,63 @@ class Autoencoder(object):
             return layer
 
     def run(self):
-        with tf.device('/gpu:0'):
-            with tf.variable_scope('Input'):
-                x_original = tf.placeholder(name='x_original', shape=[None, self.img_size_flat], dtype=tf.float32)
-                x_noisy = tf.placeholder(name='x_noise', shape=[None, self.img_size_flat], dtype=tf.float32)
+        with tf.variable_scope('Input'):
+            x_original = tf.placeholder(name='x_original', shape=[None, self.img_size_flat], dtype=tf.float32)
+            x_noisy = tf.placeholder(name='x_noise', shape=[None, self.img_size_flat], dtype=tf.float32)
 
-            fc1 = self.fc_layer(x_noisy, self.h1, 'layer_1')
-            fc2 = self.fc_layer(fc1, self.h2, 'layer_2')
-            fc3 = self.fc_layer(fc2, self.h3, 'layer_3')
-            out = self.fc_layer(fc3, self.img_size_flat, 'output')
+        fc1 = self.fc_layer(x_noisy, self.h1, 'layer_1')
+        fc2 = self.fc_layer(fc1, self.h2, 'layer_2')
+        fc3 = self.fc_layer(fc2, self.h3, 'layer_3')
+        out = self.fc_layer(fc3, self.img_size_flat, 'output')
 
+        with tf.variable_scope('Train'):
+            with tf.variable_scope('Loss'):
+                loss = tf.reduce_mean(tf.losses.mean_squared_error(x_original, out), name='loss')
             with tf.variable_scope('Train'):
-                with tf.variable_scope('Loss'):
-                    loss = tf.reduce_mean(tf.losses.mean_squared_error(x_original, out), name='loss')
-                with tf.variable_scope('Train'):
-                    optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='adam-op').minimize(loss)
+                optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='adam-op').minimize(loss)
 
-            init = tf.global_variables_initializer()
+        init = tf.global_variables_initializer()
 
-            sess = tf.InteractiveSession(config=tf.ConfigProto(log_device_placement=True))
-            sess.run(init)
+        sess = tf.InteractiveSession(config=tf.ConfigProto(log_device_placement=True))
+        sess.run(init)
 
-            num_tr_iter = int(self.mnist.train.num_examples / self.batch_size)
+        num_tr_iter = int(self.mnist.train.num_examples / self.batch_size)
 
-            x_valid_original = self.mnist.validation.images
-            x_valid_noisy = x_valid_original + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=x_valid_original.shape)
+        x_valid_original = self.mnist.validation.images
+        x_valid_noisy = x_valid_original + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=x_valid_original.shape)
 
-            for epoch in range(self.epochs):
-                print('Training epoch {}'.format(epoch + 1))
-                for iteration in range(num_tr_iter):
-                    batch_x, _ = self.mnist.train.next_batch(self.batch_size)
-                    batch_x_noisy = batch_x + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=batch_x.shape)
+        for epoch in range(self.epochs):
+            print('Training epoch {}'.format(epoch + 1))
+            for iteration in range(num_tr_iter):
+                batch_x, _ = self.mnist.train.next_batch(self.batch_size)
+                batch_x_noisy = batch_x + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=batch_x.shape)
 
-                    feed_dict_bath = {x_original: batch_x, x_noisy: batch_x_noisy}
-                    _ = sess.run([optimizer], feed_dict=feed_dict_bath)
+                feed_dict_bath = {x_original: batch_x, x_noisy: batch_x_noisy}
+                _ = sess.run([optimizer], feed_dict=feed_dict_bath)
 
-                    if not (iteration % self.display_freq):
-                        loss_batch = sess.run(loss, feed_dict=feed_dict_bath)
-                        print("iteration {0}:\t Reconstruction loss= {1:.3f}".format(iteration, loss_batch))
+                if not (iteration % self.display_freq):
+                    loss_batch = sess.run(loss, feed_dict=feed_dict_bath)
+                    print("iteration {0}:\t Reconstruction loss= {1:.3f}".format(iteration, loss_batch))
 
-                feed_dict_bath = {x_original: x_valid_original, x_noisy: x_valid_noisy}
-                loss_valid = sess.run(loss, feed_dict=feed_dict_bath)
+            feed_dict_bath = {x_original: x_valid_original, x_noisy: x_valid_noisy}
+            loss_valid = sess.run(loss, feed_dict=feed_dict_bath)
 
-                print('---------------------------------------------------------')
-                print("Epoch: {0}, validation loss: {1:.3f}".format(epoch + 1, loss_valid))
-                print('---------------------------------------------------------')
-
-            num_test_samples = 5
-            x_test = self.mnist.test.images[:num_test_samples]
-            x_test_noisy = x_test + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=x_test.shape)
-
-            x_reconstruct = sess.run(out, feed_dict={x_noisy: x_test_noisy})
-            loss_test = sess.run(loss, feed_dict={x_original: x_test, x_noisy: x_test_noisy})
             print('---------------------------------------------------------')
-            print("Test loss of original image compared to reconstructed image : {0:.3f}".format(loss_test))
+            print("Epoch: {0}, validation loss: {1:.3f}".format(epoch + 1, loss_valid))
             print('---------------------------------------------------------')
 
-            # plot_images(x_test, x_test_noisy, x_reconstruct)
-            sess.close()
+        num_test_samples = 5
+        x_test = self.mnist.test.images[:num_test_samples]
+        x_test_noisy = x_test + self.noise_level * np.random.normal(loc=0.0, scale=1.0, size=x_test.shape)
+
+        x_reconstruct = sess.run(out, feed_dict={x_noisy: x_test_noisy})
+        loss_test = sess.run(loss, feed_dict={x_original: x_test, x_noisy: x_test_noisy})
+        print('---------------------------------------------------------')
+        print("Test loss of original image compared to reconstructed image : {0:.3f}".format(loss_test))
+        print('---------------------------------------------------------')
+
+        plot_images(x_test, x_test_noisy, x_reconstruct)
+        sess.close()
 
 
 def main():

@@ -2,7 +2,9 @@ import tensorflow.compat.v1 as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow_core.examples.tutorials.mnist import input_data
+import os
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 tf.disable_eager_execution()
 tf.disable_control_flow_v2()
 

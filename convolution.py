@@ -3,7 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow_core.examples.tutorials.mnist import input_data
 from simple_neural_network import plot_images, plot_example_errors
+import os
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 tf.disable_eager_execution()
 tf.disable_control_flow_v2()
 
@@ -16,7 +18,7 @@ class CNN(object):
         self.n_channels = 1
 
         self.learning_rate = 0.001
-        self.epochs = 20
+        self.epochs = 10
         self.batch_size = 100
         self.display_freq = 100
 
